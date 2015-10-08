@@ -50,6 +50,7 @@ type RequestInfo struct {
 	Method     string
 	Error      error
 	Request    *http.Request
+	Reply      interface{}
 	StatusCode int
 }
 
@@ -222,6 +223,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Request:    r,
 				Method:     method,
 				Error:      errResult,
+				Reply:      reply,
 				StatusCode: 200,
 			})
 		}
