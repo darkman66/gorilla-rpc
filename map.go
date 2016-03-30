@@ -35,6 +35,7 @@ type service struct {
 
 type serviceMethod struct {
 	method    reflect.Method // receiver method
+	args      reflect.Type   // type of the request argument
 	argsType  reflect.Type   // type of the request argument
 	replyType reflect.Type   // type of the response argument
 }
@@ -88,7 +89,7 @@ func (m *serviceMap) register(rcvr interface{}, name string, passReq bool) error
 			continue
 		}
 		// Method needs four ins: receiver, *http.Request, *args, *reply.
-		if mtype.NumIn() != 3 + paramOffset {
+		if mtype.NumIn() != 3+paramOffset {
 			continue
 		}
 
@@ -102,9 +103,13 @@ func (m *serviceMap) register(rcvr interface{}, name string, passReq bool) error
 		}
 		// Next argument must be a pointer and must be exported.
 		args := mtype.In(1 + paramOffset)
-		if args.Kind() != reflect.Ptr || !isExportedOrBuiltin(args) {
+		argsType := args.Elem()
+		if args.Kind() != reflect.Ptr && (args.Kind() == reflect.Map || args.Kind() == reflect.Slice) {
+			argsType = args
+		} else if args.Kind() != reflect.Ptr || !isExportedOrBuiltin(args) {
 			continue
 		}
+
 		// Next argument must be a pointer and must be exported.
 		reply := mtype.In(2 + paramOffset)
 		if reply.Kind() != reflect.Ptr || !isExportedOrBuiltin(reply) {
@@ -119,7 +124,8 @@ func (m *serviceMap) register(rcvr interface{}, name string, passReq bool) error
 		}
 		s.methods[method.Name] = &serviceMethod{
 			method:    method,
-			argsType:  args.Elem(),
+			args:      args,
+			argsType:  argsType,
 			replyType: reply.Elem(),
 		}
 	}

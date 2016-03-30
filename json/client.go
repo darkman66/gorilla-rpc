@@ -49,14 +49,18 @@ func EncodeClientRequest(method string, args interface{}) ([]byte, error) {
 // the interface reply.
 func DecodeClientResponse(r io.Reader, reply interface{}) error {
 	var c clientResponse
+
 	if err := json.NewDecoder(r).Decode(&c); err != nil {
 		return err
 	}
+
 	if c.Error != nil {
 		return fmt.Errorf("%v", c.Error)
 	}
+
 	if c.Result == nil {
 		return errors.New("result is null")
 	}
+
 	return json.Unmarshal(*c.Result, reply)
 }

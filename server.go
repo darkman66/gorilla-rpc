@@ -164,6 +164,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Decode the args.
 	args := reflect.New(methodSpec.argsType)
+
 	if errRead := codecReq.ReadRequest(args.Interface()); errRead != nil {
 		s.writeError(w, 400, errRead.Error())
 		return
@@ -185,19 +186,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reply.Elem().Set(reflect.MakeSlice(methodSpec.replyType, 0, 0))
 	}
 
+	argsIn := args
+	if methodSpec.args.Kind() != reflect.Ptr && (methodSpec.argsType.Kind() == reflect.Map || methodSpec.argsType.Kind() == reflect.Slice) {
+		argsIn = args.Elem()
+	}
+
 	// omit the HTTP request if the service method doesn't accept it
 	var errValue []reflect.Value
 	if serviceSpec.passReq {
 		errValue = methodSpec.method.Func.Call([]reflect.Value{
 			serviceSpec.rcvr,
 			reflect.ValueOf(r),
-			args,
+			argsIn,
 			reply,
 		})
 	} else {
 		errValue = methodSpec.method.Func.Call([]reflect.Value{
 			serviceSpec.rcvr,
-			args,
+			argsIn,
 			reply,
 		})
 	}
