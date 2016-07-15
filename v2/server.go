@@ -46,10 +46,20 @@ func NewServer() *Server {
 	}
 }
 
+// RequestInfo contains all the information we pass to before/after functions
+type RequestInfo struct {
+	Method     string
+	Error      error
+	Request    *http.Request
+	StatusCode int
+}
+
 // Server serves registered RPC services using registered codecs.
 type Server struct {
-	codecs   map[string]Codec
-	services *serviceMap
+	codecs     map[string]Codec
+	services   *serviceMap
+	beforeFunc *func(i *RequestInfo)
+	afterFunc  *func(i *RequestInfo)
 }
 
 // RegisterCodec adds a new codec to the server.
@@ -91,6 +101,18 @@ func (s *Server) HasMethod(method string) bool {
 	return false
 }
 
+// RegisterBeforeFunc registers the specified function as the function
+// that will be called before every request
+func (s *Server) RegisterBeforeFunc(f func(i *RequestInfo)) {
+	s.beforeFunc = &f
+}
+
+// RegisterAfterFunc registers the specified function as the function
+// that will be called after every request
+func (s *Server) RegisterAfterFunc(f func(i *RequestInfo)) {
+	s.afterFunc = &f
+}
+
 // ServeHTTP
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -126,12 +148,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		codecReq.WriteError(w, 400, errRead)
 		return
 	}
+
+	// Call the registered Before Function
+	if s.beforeFunc != nil {
+		(*s.beforeFunc)(&RequestInfo{
+			Request: r,
+			Method:  method,
+		})
+	}
+
 	// Call the service method.
 	reply := reflect.New(methodSpec.replyType)
+
+	// Initialize empty slice
+	if methodSpec.replyType.Kind() == reflect.Slice {
+		reply.Elem().Set(reflect.MakeSlice(methodSpec.replyType, 0, 0))
+	}
+
+	argsIn := args
+	if args.Kind() != reflect.Ptr && (methodSpec.argsType.Kind() == reflect.Map || methodSpec.argsType.Kind() == reflect.Slice) {
+		argsIn = args.Elem()
+	}
+
 	errValue := methodSpec.method.Func.Call([]reflect.Value{
 		serviceSpec.rcvr,
 		reflect.ValueOf(r),
-		args,
+		argsIn,
 		reply,
 	})
 	// Cast the result to error if needed.
@@ -143,11 +185,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Prevents Internet Explorer from MIME-sniffing a response away
 	// from the declared content-type
 	w.Header().Set("x-content-type-options", "nosniff")
+
+	statusCode := 200
 	// Encode the response.
 	if errResult == nil {
 		codecReq.WriteResponse(w, reply.Interface())
 	} else {
+		statusCode = 400
 		codecReq.WriteError(w, 400, errResult)
+	}
+
+	// Call the registered After Function
+	if s.afterFunc != nil {
+		(*s.afterFunc)(&RequestInfo{
+			Request:    r,
+			Method:     method,
+			Error:      errResult,
+			StatusCode: statusCode,
+		})
 	}
 }
 
