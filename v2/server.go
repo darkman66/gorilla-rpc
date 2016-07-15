@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+
+	"github.com/segmentio/gorilla-rpc"
 )
 
 // ----------------------------------------------------------------------------
@@ -46,20 +48,12 @@ func NewServer() *Server {
 	}
 }
 
-// RequestInfo contains all the information we pass to before/after functions
-type RequestInfo struct {
-	Method     string
-	Error      error
-	Request    *http.Request
-	StatusCode int
-}
-
 // Server serves registered RPC services using registered codecs.
 type Server struct {
 	codecs     map[string]Codec
 	services   *serviceMap
-	beforeFunc *func(i *RequestInfo)
-	afterFunc  *func(i *RequestInfo)
+	beforeFunc *func(i *rpc.RequestInfo)
+	afterFunc  *func(i *rpc.RequestInfo)
 }
 
 // RegisterCodec adds a new codec to the server.
@@ -103,13 +97,13 @@ func (s *Server) HasMethod(method string) bool {
 
 // RegisterBeforeFunc registers the specified function as the function
 // that will be called before every request
-func (s *Server) RegisterBeforeFunc(f func(i *RequestInfo)) {
+func (s *Server) RegisterBeforeFunc(f func(i *rpc.RequestInfo)) {
 	s.beforeFunc = &f
 }
 
 // RegisterAfterFunc registers the specified function as the function
 // that will be called after every request
-func (s *Server) RegisterAfterFunc(f func(i *RequestInfo)) {
+func (s *Server) RegisterAfterFunc(f func(i *rpc.RequestInfo)) {
 	s.afterFunc = &f
 }
 
@@ -151,7 +145,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Call the registered Before Function
 	if s.beforeFunc != nil {
-		(*s.beforeFunc)(&RequestInfo{
+		(*s.beforeFunc)(&rpc.RequestInfo{
 			Request: r,
 			Method:  method,
 		})
@@ -197,7 +191,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Call the registered After Function
 	if s.afterFunc != nil {
-		(*s.afterFunc)(&RequestInfo{
+		(*s.afterFunc)(&rpc.RequestInfo{
 			Request:    r,
 			Method:     method,
 			Error:      errResult,
